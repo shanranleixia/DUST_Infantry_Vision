@@ -67,6 +67,11 @@ CBoard::~CBoard()
   Eigen::Quaterniond q_b = data_behind_.q.normalized();
   auto t_a = data_ahead_.timestamp;
   auto t_b = data_behind_.timestamp;
+
+  if (t_a == t_b) {
+    return q_a;
+  }
+
   auto t_c = timestamp;
   std::chrono::duration<double> t_ab = t_b - t_a;
   std::chrono::duration<double> t_ac = t_c - t_a;
@@ -131,7 +136,7 @@ void CBoard::read_thread()
 
     auto timestamp = std::chrono::steady_clock::now();
 
-    if (rx_data.type == 1) {  // IMU
+    if (rx_data.type == 0) {  // IMU
       Eigen::Quaterniond q(rx_data.q[0], rx_data.q[1], rx_data.q[2], rx_data.q[3]);
       queue_.push({q, timestamp});
 
