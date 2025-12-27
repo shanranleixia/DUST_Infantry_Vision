@@ -187,7 +187,7 @@ void Gimbal::read_thread()
     for (size_t i = 0; i < sizeof(rx_data_); ++i) {
       raw_hex += fmt::format("{:02x} ", reinterpret_cast<uint8_t*>(&rx_data_)[i]);
     }
-    tools::logger()->debug("[Gimbal] Raw data: {}", raw_hex);
+    // tools::logger()->debug("[Gimbal] Raw data: {}", raw_hex);
 
     // 打印四元数
     // tools::logger()->debug("[Gimbal] Quaternion: q=[{}, {}, {}, {}]", q.w(), q.x(), q.y(), q.z());
@@ -197,8 +197,8 @@ void Gimbal::read_thread()
     float pitch_deg = rx_data_.pitch;
     float yaw_rad = yaw_deg * static_cast<float>(M_PI / 180.0);
     float pitch_rad = pitch_deg * static_cast<float>(M_PI / 180.0);
-    tools::logger()->info(
-      "[Gimbal] Yaw: {} deg, {} rad | Pitch: {} deg, {} rad", yaw_deg, yaw_rad, pitch_deg, pitch_rad);
+    // tools::logger()->info(
+    //   "[Gimbal] Yaw: {} deg, {} rad | Pitch: {} deg, {} rad", yaw_deg, yaw_rad, pitch_deg, pitch_rad);
 
     std::lock_guard<std::mutex> lock(mutex_);
 

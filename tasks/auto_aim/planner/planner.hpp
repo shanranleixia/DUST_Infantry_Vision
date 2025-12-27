@@ -11,7 +11,7 @@
 namespace auto_aim
 {
 constexpr double DT = 0.01;
-constexpr int HALF_HORIZON = 50;
+constexpr int HALF_HORIZON = 15;
 constexpr int HORIZON = HALF_HORIZON * 2;
 
 using Trajectory = Eigen::Matrix<double, 4, HORIZON>;  // yaw, yaw_vel, pitch, pitch_vel

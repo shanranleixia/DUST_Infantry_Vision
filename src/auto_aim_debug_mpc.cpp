@@ -48,6 +48,9 @@ int main(int argc, char * argv[])
   tools::ThreadSafeQueue<std::optional<auto_aim::Target>, true> target_queue(1);
   target_queue.push(std::nullopt);
 
+  // 用于线程间共享 Tracker 状态
+  std::atomic<int> tracker_state_code{0};  // 0=lost, 1=detecting, 2=tracking, 3=temp_lost, 4=switching
+
   std::atomic<bool> quit = false;
   auto plan_thread = std::thread([&]() {
     auto t0 = std::chrono::steady_clock::now();
@@ -67,6 +70,10 @@ int main(int argc, char * argv[])
 
       nlohmann::json data;
       data["t"] = tools::delta_time(std::chrono::steady_clock::now(), t0);
+      
+      // Tracker 状态
+      data["tracker_state"] = tracker_state_code.load();
+      data["has_target"] = target.has_value() ? 1 : 0;
 
   data["gimbal_yaw"] = gs.yaw;  // radians
   data["gimbal_yaw_vel"] = gs.yaw_vel;
@@ -106,6 +113,8 @@ int main(int argc, char * argv[])
 
   cv::Mat img;
   std::chrono::steady_clock::time_point t;
+  auto t0 = std::chrono::steady_clock::now();
+  std::string last_state = "lost";
 
   while (!exiter.exit()) {
     camera.read(img, t);
@@ -115,6 +124,21 @@ int main(int argc, char * argv[])
     solver.set_R_gimbal2world(q);
     auto armors = yolo.detect(img);
     auto targets = tracker.track(armors, t);
+    
+    // 调试信息：Tracker 状态变化
+    auto current_state = tracker.state();
+    if (current_state != last_state) {
+      tools::logger()->info("[Tracker] State: {} -> {}", last_state, current_state);
+      last_state = current_state;
+    }
+    
+    // 更新状态码供 plotter 使用
+    if (current_state == "lost") tracker_state_code = 0;
+    else if (current_state == "detecting") tracker_state_code = 1;
+    else if (current_state == "tracking") tracker_state_code = 2;
+    else if (current_state == "temp_lost") tracker_state_code = 3;
+    else if (current_state == "switching") tracker_state_code = 4;
+    
     if (!targets.empty())
       target_queue.push(targets.front());
     else
@@ -135,7 +159,22 @@ int main(int argc, char * argv[])
       auto image_points =
         solver.reproject_armor(aim_xyza.head(3), aim_xyza[3], target.armor_type, target.name);
       tools::draw_points(img, image_points, {0, 0, 255});
+      
+      // 在图像上显示 EKF 状态信息
+      auto ekf_x = target.ekf_x();
+      cv::putText(img, fmt::format("w: {:.2f} rad/s", ekf_x[7]), 
+                  {10, 60}, cv::FONT_HERSHEY_SIMPLEX, 0.6, {0, 255, 0}, 2);
+      cv::putText(img, fmt::format("r: {:.3f} m", ekf_x[8]), 
+                  {10, 90}, cv::FONT_HERSHEY_SIMPLEX, 0.6, {0, 255, 0}, 2);
     }
+    
+    // 在图像上显示 Tracker 状态
+    cv::Scalar state_color = (current_state == "tracking") ? cv::Scalar(0, 255, 0) : 
+                             (current_state == "detecting") ? cv::Scalar(0, 255, 255) :
+                             (current_state == "temp_lost") ? cv::Scalar(0, 165, 255) :
+                             cv::Scalar(0, 0, 255);  // lost = red
+    cv::putText(img, fmt::format("State: {}", current_state), 
+                {10, 30}, cv::FONT_HERSHEY_SIMPLEX, 0.8, state_color, 2);
 
     cv::resize(img, img, {}, 0.5, 0.5);  // 显示时缩小图片尺寸
     cv::imshow("reprojection", img);

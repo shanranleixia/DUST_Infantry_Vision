@@ -99,7 +99,7 @@ void Target::predict(double dt)
     v2 = 0.1;  // 前哨站角加速度方差
   } else {
     v1 = 100;  // 加速度方差
-    v2 = 400;  // 角加速度方差
+    v2 = 1000;  // 角加速度方差
   }
   auto a = dt * dt * dt * dt / 4;
   auto b = dt * dt * dt / 2;
@@ -125,6 +125,10 @@ void Target::predict(double dt)
   auto f = [&](const Eigen::VectorXd & x) -> Eigen::VectorXd {
     Eigen::VectorXd x_prior = F * x;
     x_prior[6] = tools::limit_rad(x_prior[6]);
+        
+    // 角速度衰减：每次预测让角速度衰减一点，帮助快速响应急停
+    // 衰减因子 0.98 意味着每秒衰减到原来的 0.98^100 ≈ 13%
+    x_prior[7] *= 0.98;
     return x_prior;
   };
 
@@ -240,12 +244,18 @@ std::vector<Eigen::Vector4d> Target::armor_xyza_list() const
 
 bool Target::diverged() const
 {
-  auto r_ok = ekf_.x[8] > 0.05 && ekf_.x[8] < 0.5;
-  auto l_ok = ekf_.x[8] + ekf_.x[9] > 0.05 && ekf_.x[8] + ekf_.x[9] < 0.5;
+  // 只检测 r 是否超出合理范围（过大或为负太多）
+  // 静止目标的 r 可能接近 0，这是正常的
+  auto r = ekf_.x[8];
+  auto r_plus_l = ekf_.x[8] + ekf_.x[9];
+  
+  // 只有当 r 超出 [-0.2, 0.8] 范围时才认为发散
+  auto r_ok = r > -0.2 && r < 0.8;
+  auto l_ok = r_plus_l > -0.2 && r_plus_l < 0.8;
 
   if (r_ok && l_ok) return false;
 
-  tools::logger()->debug("[Target] r={:.3f}, l={:.3f}", ekf_.x[8], ekf_.x[9]);
+  tools::logger()->debug("[Target] Diverged! r={:.3f}, l={:.3f}", ekf_.x[8], ekf_.x[9]);
   return true;
 }
 
